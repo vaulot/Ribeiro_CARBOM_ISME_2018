@@ -1,13 +1,11 @@
 library("mapproj")
 library("maps")
-# library("mapdata")
 library("ggmap")
 
 library("treemap") # To create tree maps...
 
 library("ggplot2")
 library("gplots") # to convert colors to hex and also for heat plots
-# library("heatmaply")   # for interactive heatmaps 
 
 library("scales") # For formatting the scales in graphic
 library("gridExtra") # necessary to arrange graphics into grid
@@ -17,23 +15,22 @@ library("RColorBrewer") # for color options
 library("akima") # To interpolate the grid for contour plots
 
 library("mapplots") # for pie charts on a map
-# library("reshape2")  # Needed to reshape the column with the classes
-# library("plyr")   # To normalize data by groups...
+library("reshape2")  # Needed to reshape the column with the classes
+library("plyr")   # To normalize data by groups...
 library("dplyr")  # To filter data
 library("tidyr")  # To melt the data using a more refined way
-library("stringr") #Ë To process strings
+library("tibble")  # To play with row names
+library("stringr") # To process strings
 
 library("vegan") # For ecological computations....
+library("psych") # For multiple correlation tests
 
 library("igraph") # For networks graphs
 
-setwd("C:/Users/vaulot/Google Drive/Papers/2016 Ribeiro CARBOM ISME/R")
 
-# =======================================================
-# ======================  Samples  ======================
-# =======================================================
+# Load sample data --------------------------------------------------------
 
-# Read the sample data files
+# Read the sample data files from text file
   samples<- read.table("carbom_samples.txt", header=TRUE, sep="\t", na.strings="NA", dec=".", strip.white=TRUE)
 
 # Read the environmental data file
@@ -45,16 +42,15 @@ setwd("C:/Users/vaulot/Google Drive/Papers/2016 Ribeiro CARBOM ISME/R")
 
 # Read the flow cytometry data file
   fcm <- read.table("carbom_fcm.txt", header=TRUE, sep="\t", na.strings="NA", dec=".", strip.white=TRUE)
-
+  samples<- left_join(samples, select(fcm, station, depth, bacteria, prochlorococcus, synechococcus, 
+                                           picoeukaryotes, nanoeukaryotes))
 
 # Create label for sample
   samples$sample_label<-paste("TR",samples$transect,"_St",samples$station,"_",samples$depth,"m_",samples$sample_illumina, sep="")
 
   fractions<-c("Pico","Nano")
 
-# =======================================================
-#   Create map of stations - Fig. 1 
-#-----------------------------------------------------------
+# Create map of stations - Fig. 1 -----------------------------------------------------------
   
 # --- FIG. 1A - map of region with normal map
 pdf("./pdf_figures_2.0/Fig_1_map_global_bw 2.0.pdf",width = 6, height = 6, useDingbats=FALSE)
@@ -84,30 +80,6 @@ ggsave( plot=map_wide,
         width = 20, height = 20, scale=1.2, units="cm", useDingbats=FALSE)
 
 
-# =======================================================
-#   Do contour plots of fcm 
-#-----------------------------------------------------------
-  fcm_tr <- filter(fcm, (transect == 2)) 
-  ggplot(data = fcm_tr, aes(x = longitude, y = -depth, z = picoeukaryotes)) +
-  geom_tile(aes(fill = picoeukaryotes)) +
-  stat_contour(bins=10) +
-  ggtitle("Picoeuks") +
-  xlab("Longitude") +
-  ylab("Depth") +
-  scale_fill_continuous(name = "picoeukaryotes",low = "white", high = "blue") +
-  theme(plot.title = element_text(size = 25, face = "bold"),
-        legend.title = element_text(size = 15),
-        axis.text = element_text(size = 15),
-        axis.title.x = element_text(size = 20, vjust = -0.5),
-        axis.title.y = element_text(size = 20, vjust = 0.2),
-        legend.text = element_text(size = 10))
-
-  fld <- with(fcm_tr, interp(x = longitude, y = -depth, z = picoeukaryotes, duplicate = "mean", nx= 1000, ny=1000))
-  filled.contour(x = fld$x, y = fld$y,z= fld$z, color.palette =  colorRampPalette(c("blue", "white", "red")),
-               xlab = "Longitude",
-               ylab = "Depth",
-               main = "Picoeuks",
-               key.title = title(main = "picoeuks", cex.main = 1))
 # =======================================================
 #   Reformat the table for the paper - Table 1  
 #-----------------------------------------------------------
@@ -150,10 +122,12 @@ sample_table <- left_join(sample_table, sample_table_nano)
   classes_nifH<- read.table("classes_nifH.txt", header=TRUE, sep="\t", 
                             na.strings="NA", dec=".", strip.white=TRUE, comment.char = "")
   # classes_nifH$color_hex<-col2hex(classes_nifH$color)
+  
 # This named vector is necessary for the ggplot2 below
   class_nifH_color<-structure(as.character(classes_nifH$color),.Names=as.character(classes_nifH$class)) 
   taxo_nifH_ordered <- rev(as.character(classes_nifH$class))
   # classes_nifH$color_otu_hex<-col2hex(classes_nifH$color_otu)
+  
 # This named vector is necessary for the ggplot2 below
   class_nifH_color_otu<-structure(as.character(classes_nifH$color_otu_hex),.Names=as.character(classes_nifH$class)) 
 
@@ -162,9 +136,9 @@ sample_table <- left_join(sample_table, sample_table_nano)
 #                                  ==========================  18S  ======================
 # =====================================================================================================================================================================
 
-# Read the otu table
+# Read the otu table from a text file
   otu_table<- read.table("carbom_18S_otu_0.02.txt", header=TRUE, sep="\t", na.strings="NA", dec=".", strip.white=TRUE)
-
+  
 # Merge with classes for colors
   otu_table <-merge(otu_table, subset(classes, select = class:color_hex), by.x="Final_Taxo4", by.y="class") 
 
@@ -191,25 +165,26 @@ sample_table <- left_join(sample_table, sample_table_nano)
 #-----------------------------------------------------------
 
 # Melt the otu table (use the new tidyr library)
-  otu_melt <- otu_table %>% gather(sample_id, sequence_number, X10n:tri03p, factor_key = TRUE)  
+  otu_melt <- otu_table %>% gather(sample_id, sequence_number, "10n":tri03p, factor_key = TRUE)  
 
 # Merge otu table and sample
-  otu_melt <-merge(otu_melt, samples, by.x="sample_id", by.y="sample_id") 
+  samples <- samples %>% select(-sample_id)
+  otu_melt <-merge(otu_melt, samples, by.x="sample_id", by.y="sample_illumina") 
   
 
 # Only keep selected stations
   otu_melt <- filter(otu_melt, Select_18S_nifH == "Yes")					 # Keep selected stations
 
 # Write melted table
-  write.table(otu_melt, file="carbom_18S_otu_0.02.otu_melt.txt", sep="\t", row.names = FALSE) 
+  write.table(otu_melt, file="carbom_18S_otu_0.02.otu_melt.txt", sep="\t", row.names = FALSE)
 
 # Only keep the autotrophic groups
   otu_melt_auto <- filter(otu_melt, trophic_mode=="auto")	
   total_sequence_corrected <- otu_melt_auto %>% 
-                              group_by (sample_illumina) %>% 
+                              group_by (sample_id) %>% 
                               summarize (total_18S_auto=sum(sequence_number)) %>%
-                              select(sample_illumina, total_18S_auto)
-  otu_melt_auto <-merge(otu_melt_auto, total_sequence_corrected, by.x="sample_illumina", by.y="sample_illumina") 
+                              select(sample_id, total_18S_auto)
+  otu_melt_auto <-merge(otu_melt_auto, total_sequence_corrected, by.x="sample_id", by.y="sample_id") 
 
 # =======================================================
 # 18S Compute matrixes of abundances for OTUs for autotrophs
@@ -245,6 +220,12 @@ sample_table <- left_join(sample_table, sample_table_nano)
   otu_abund <- names(which(maxab >= 0.20))
   otu_matrix_relative_abund <- otu_matrix_relative[, -which(colnames(otu_matrix_relative) %in% otu_low)]
   otu_matrix_abund <- otu_matrix[, -which(colnames(otu_matrix_relative) %in% otu_low)]
+
+# Export matrices
+  write.table(otu_matrix_relative, file="otu_matrix_relative.txt",
+              row.names = TRUE,  col.names = TRUE, sep="\t", quote=FALSE)
+  write.table(otu_matrix_relative_abund, file="otu_matrix_relative_abund.txt",
+              row.names = TRUE,  col.names = TRUE, sep="\t", quote=FALSE)
 
 # Do a small table with the information from major OTUs
   otu_table_paper <- otu_table %>% filter(otu_label %in% otu_abund) %>% transmute(otu, otu_total, Division=Final_Taxo3, Class=Final_Taxo4, Genus=Final_Taxo7, Species=Final_Taxo8, BLAST_best_Accession, BLAST_best_identity, BLAST_best_Description) %>% arrange(otu)
@@ -485,27 +466,7 @@ for (one_fraction in fractions) {
   dev.off()
 }
 
-# =======================================================
-#   Compute absolute abundance of two major OTUs per mL 
-#-----------------------------------------------------------
 
-
-otu_mL <-as.data.frame(otu_matrix_relative_abund)
-otu_mL$sample_label=row.names(otu_matrix_relative_abund)
-otu_mL <- transmute (otu_mL,sample_label,Otu001_Ostreococcus, Otu002_UCYN_A1_host  )
-otu_mL <- left_join(samples, otu_mL)
-
-otu_mL_pico <- otu_mL %>% filter ((Select_18S_nifH=="Yes") & (fraction == "Pico")) %>% transmute (station_order, otu001_pico=Otu001_Ostreococcus*picoeuks, otu002_pico = Otu002_UCYN_A1_host*picoeuks )
-otu_mL_nano <- otu_mL %>% filter ((Select_18S_nifH=="Yes") & (fraction == "Nano")) %>% transmute (station_order, otu001_nano=Otu001_Ostreococcus*nanoeuks, otu002_nano = Otu002_UCYN_A1_host*nanoeuks )
-
-otu_mL <- otu_mL %>% filter (Select_18S_nifH=="Yes") %>% group_by (station_order, transect, station, depth, latitude, longitude, level, transect_distance) %>% summarise(fraction_number = n())
- 
-otu_mL<- left_join(otu_mL, otu_mL_pico)
-otu_mL<- left_join(otu_mL, otu_mL_nano)
-otu_mL[is.na(otu_mL)] <- 0
-otu_mL <- mutate(otu_mL, otu001_mL = otu001_pico + otu001_nano, otu002_mL = otu002_pico + otu002_nano)  
-
-  
   
 # =======================================================
 # 18S  - Similarity Matrix for samples  : Compute it for different metrix 
@@ -557,27 +518,99 @@ otu_mL <- mutate(otu_mL, otu001_mL = otu001_pico + otu001_nano, otu002_mL = otu0
             key.title= NA , key.xlab = "Relative abundance")
   dev.off()
   
-# =======================================================
-#  18S - MSDS based using vegan on Bray distance of relative abundance, 
-#--------------------------------------------------------
-# Compute MSDS
-  otu_matrix_relative_abund.mds <- metaMDS(otu_matrix_relative_abund, trace = FALSE) 
-  otu_matrix_relative_abund.mds
-  plot(otu_matrix_relative_abund.mds, type = "t", display="species")
+
+# 18S - Stats - MSDS based using vegan on Bray distance of relative abundance --------
+
 
 # Create environmental table to put on msds
-  envdata_table <- select(filter(samples,Select_18S_nifH == "Yes"), sample_label, depth, transect_distance, phosphates, silicates, nitrates, temperature, fluorescence, salinity, fraction)
-  row.names(envdata_table) <- envdata_table$sample_label
-  envdata_table <- select(envdata_table, -sample_label)
+
+  envdata_table <- select(filter(samples,Select_18S_nifH == "Yes"), sample_illumina, depth, 
+                          transect_distance, phosphates, silicates, nitrates, temperature, 
+                          fluorescence, salinity, fraction, 
+                          bacteria, prochlorococcus, synechococcus, picoeukaryotes, nanoeukaryotes)
+  envdata_table <- envdata_table %>%  mutate (N_P =nitrates/phosphates) %>% 
+                                      select(-bacteria, -fraction, -nitrates, -phosphates, - silicates)
+  
+  row.names(envdata_table) <- envdata_table$sample_illumina
+  envdata_table <- select(envdata_table, -sample_illumina)
+    # write.table(envdata_table, file="envdata_table.txt", 
+    #           row.names = TRUE,  col.names = TRUE, sep="\t", quote=FALSE)
+  # envdata_table <- envdata_table[ order(row.names(envdata_table)), ]  # Note if reorder the rows then the row name disappear...
+  
+  # Rename the row names to be shorter
+  otu_matrix_relative_abund_msds <- otu_matrix_relative_abund
+  row_names_short <- str_split_fixed(row.names(otu_matrix_relative_abund_msds),"_", n=4)
+  row.names(otu_matrix_relative_abund_msds) <- row_names_short[,4]
+  otu_matrix_relative_abund_msds <- otu_matrix_relative_abund_msds[ order(row.names(otu_matrix_relative_abund_msds)), ]
+  
+# Compare the different distances for separation - Bray Curtis appears best
+  rankindex(envdata_table, otu_matrix_relative_abund_msds)
+  
+#         euc         man         gow         bra         kul 
+# -0.10460145 -0.12017731 -0.15173360 -0.04435000 -0.04604831 
+  
+# Compute MSDS
+  otu_matrix_relative_abund.mds <- metaMDS(otu_matrix_relative_abund_msds, trace = TRUE) 
+  otu_matrix_relative_abund.mds
+  # plot(otu_matrix_relative_abund.mds, type = "t", display="species")
+  plot(otu_matrix_relative_abund.mds, type = "t", display="sites")
+  # plot(otu_matrix_relative_abund.mds, type = "p", display="sites")
 
 # Fit environmental variables including Pico and Nano
   otu_matrix_relative_abund.ef <- envfit(otu_matrix_relative_abund.mds, envdata_table, permu = 999, na.rm = TRUE)
   otu_matrix_relative_abund.ef
   plot(otu_matrix_relative_abund.ef, p.max = 1)
+  
+# global Multidimensional Scaling using monoMDS
+# 
+# Data:     otu_matrix_relative_abund_msds 
+# Distance: bray 
+# 
+# Dimensions: 2 
+# Stress:     0.2500929 
+# Stress type 1, weak ties
+# No convergent solutions - best solution after 20 tries
+# Scaling: centring, PC rotation, halfchange scaling 
+# Species: expanded scores based on 'otu_matrix_relative_abund_msds'***VECTORS
 
-# =====================================================================================================================================================================
-#                                  ==========================  nifH  ======================
-# =====================================================================================================================================================================
+#                      NMDS1    NMDS2     r2 Pr(>r)  
+# depth             -0.99531  0.09678 0.0578  0.370  
+# transect_distance  0.58527 -0.81084 0.0890  0.192  
+# temperature        0.99968 -0.02541 0.0476  0.459  
+# fluorescence      -0.97532  0.22081 0.2018  0.017 *
+# salinity           0.13213 -0.99123 0.0430  0.475  
+# prochlorococcus    0.09546 -0.99543 0.0458  0.441  
+# synechococcus     -0.62789  0.77830 0.0487  0.409  
+# picoeukaryotes    -0.96605 -0.25837 0.0098  0.838  
+# nanoeukaryotes    -0.62715  0.77890 0.0788  0.243  
+# N_P               -0.65297 -0.75738 0.0346  0.524  
+# ---
+# Signif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1
+# Permutation: free
+# Number of permutations: 999 
+  
+
+# PCA (principal compoment) analysis -----------------------------------------------------
+
+otu_matrix_relative_abund.rda <- rda(otu_matrix_relative_abund_msds, scale=TRUE)
+otu_matrix_relative_abund.rda
+plot(otu_matrix_relative_abund.rda)
+
+# CCA (correspondencen) analysis -----------------------------------------------------
+
+otu_matrix_relative_abund.cca <- cca(otu_matrix_relative_abund_msds, scale=TRUE)
+otu_matrix_relative_abund.cca
+plot(otu_matrix_relative_abund.cca)
+
+# Mutiple correlation -----------------------------------------------------
+otu_matrix_relative_abund_msds.cor <- corr.test(envdata_table, otu_matrix_relative_abund_msds, use="na.or.complete", method="spearman")
+write.table(otu_matrix_relative_abund_msds.cor$r, file="carbom_18S_mutiple_correlation.txt", sep="\t", quote = FALSE)
+write.table(otu_matrix_relative_abund_msds.cor$p, file="carbom_18S_mutiple_correlation_pvalue.txt", sep="\t", quote = FALSE)
+
+
+
+# nifH section ------------------------------------------------------------
+
   
 # Threshold for total sequence number.  Below this number, nifH is assumed to be absent  
   nifH_sequence_threshold <- 2000
@@ -766,22 +799,25 @@ otu_mL <- mutate(otu_mL, otu001_mL = otu001_pico + otu001_nano, otu002_mL = otu0
 #  heatmaply(as.matrix(otu_nifH_matrix_relative_abund),colors = scaleyellowred, dendrogram = "row", row_dend_left=FALSE, margins = c(200, 200, NA, 0))
 
 
-# =======================================================
-#  nifH - MSDS based using vegan on Bray distance of relative abundance, 
-#--------------------------------------------------------
+# nifH - MSDS based using vegan on Bray distance of relative abund --------  
+
+  # Rename the row names to be shorter
+  otu_nifH_matrix_relative_abund_msds <- otu_nifH_matrix_relative_abund
+  row_names_short <- str_split_fixed(row.names(otu_nifH_matrix_relative_abund_msds),"_", n=4)
+  row.names(otu_nifH_matrix_relative_abund_msds) <- row_names_short[,4]
+
 # Compute MSDS
-  otu_nifH_matrix_relative_abund.mds <- metaMDS(otu_nifH_matrix_relative_abund, trace = FALSE) 
+  otu_nifH_matrix_relative_abund.mds <- metaMDS(otu_nifH_matrix_relative_abund_msds, trace = FALSE) 
   otu_nifH_matrix_relative_abund.mds
-  plot(otu_nifH_matrix_relative_abund.mds, type = "t", display="species")
+  plot(otu_nifH_matrix_relative_abund.mds, type = "t", display=c("sites", "species"))
 
 # Create environmental table to put on msds
-  envdata_table <- select(filter(samples,Select_18S_nifH == "Yes"), sample_label, depth, transect_distance, phosphates, silicates, nitrates, temperature, fluorescence, salinity, fraction)
-  row.names(envdata_table) <- envdata_table$sample_label
-  envdata_table <- select(envdata_table, -sample_label)
-  envdata_table_nifH <- envdata_table[rownames(otu_nifH_matrix_relative_abund),]  # Only select rows for which there are some nifH data
-
+  envdata_table_nifH <- envdata_table %>% rownames_to_column() %>%
+                        filter (rowname %in% rownames(otu_nifH_matrix_relative_abund_msds)) %>%
+                        column_to_rownames()
+  
 # Fit environmental variables including Pico and Nano
-  otu_nifH_matrix_relative_abund.ef <- envfit(otu_nifH_matrix_relative_abund, envdata_table_nifH, permu = 999, na.rm = TRUE)
+  otu_nifH_matrix_relative_abund.ef <- envfit(otu_nifH_matrix_relative_abund.mds, envdata_table_nifH, permu = 999, na.rm = TRUE)
    otu_nifH_matrix_relative_abund.ef
   plot( otu_nifH_matrix_relative_abund.ef, p.max = 1)
 
@@ -795,70 +831,29 @@ otu_mL <- mutate(otu_mL, otu001_mL = otu001_pico + otu001_nano, otu002_mL = otu0
   otu_combined_matrix_abund <- merge (otu_matrix_abund, otu_nifH_matrix_abund, by="row.names")
   row.names(otu_combined_matrix_abund)=otu_combined_matrix_abund$Row.names
   otu_combined_matrix_abund=select(otu_combined_matrix_abund, -Row.names)   
-# remove samples for which no nifH (8 samples have no nifH) - NOT TO BE DONE because done before
-#  sample_no_nifH <- names(which(sample_max_nifH == 0)) 
-#  otu_combined_matrix_abund <- otu_combined_matrix_abund[-which(rownames(otu_combined_matrix_abund) %in% sample_no_nifH), ]
 # --- Export combined matrix for use with sparCC
   write.table(t(otu_combined_matrix_abund), file="carbom_18S_nifH_combined_abund.txt", sep="\t", row.names = TRUE, quote=FALSE)
 
-# # --- NOT USED Combine 18S and nifH into a single matrix (use the the abund - < 0.20 ) - For relative abundance and not absolute --- 
-#   otu_combined_matrix_relative_abund <- merge (otu_matrix_relative_abund, otu_nifH_matrix_relative_abund, by="row.names")
-#   row.names(otu_combined_matrix_relative_abund)=otu_combined_matrix_relative_abund$Row.names
-#   otu_combined_matrix_relative_abund=select(otu_combined_matrix_relative_abund, -Row.names)   
-# # --- Export combined matrix for use with sparCC
-#   write.table(t(otu_combined_matrix_relative_abund), file="carbom_18S_nifH_combined_abund_relative.txt", sep="\t", row.names = TRUE, quote=FALSE)
-
-  
-#  --- Compute dissimil between samples using Bray-Curtis
-  otu_combined_dissimil_bray=vegdist(t(otu_combined_matrix_abund),method = "bray", na.rm = F)
-  otu_combined_simil_bray <- as.matrix(1 - otu_combined_dissimil_bray)
-#  --- Compute Spearman rank correlation - does not vary with relative or absolute abundance
-  otu_combined_spearman <- cor(otu_combined_matrix_abund, method = "spearman")
 
 # =======================================================
 #  Network graphs - Using iGraph - 
 #  Note : The matrix contains all smaples even those without Cyanos nifH
 #-----------------------------------------------------------
-
-# --- Bray --- 
-  
-# Create graph based on combined matrix using the bray distance
-  otu_graph_bray <- graph.adjacency(otu_combined_simil_bray, weighted=TRUE, mode="upper")
-# Remove the links that correspond to simil <0.25
-  otu_graph_bray <- delete_edges( otu_graph_bray, E(otu_graph_bray)[weight<0.25])
-  
-  otu_graph <- otu_graph_bray
-
-# --- Spearman ---   
-  
-# Create graph based on spearman correlation for otu plus nifH
-  otu_graph_spearman <- graph.adjacency(otu_combined_spearman , weighted=TRUE, mode="upper")
-# Remove the links that correspond to correl <0.35 (excludes all negative correlations)
-  otu_graph_spearman <- delete_edges( otu_graph_spearman, E(otu_graph_spearman)[weight<0.35])
-# Remove the links that correspond to self nodes
-  otu_graph_spearman <- simplify(otu_graph_spearman)
-
   otu_graph <- otu_graph_spearman
   
 # --- Fig. 6 - SparCC ---
   
-# Use Python 2.. and not 3...  DOS Command to copy : 
-# "C:\Program Files\Anaconda\python.exe" SparCC.py carbom_18S_nifH_combined_abund.txt -i 10 --cor_file=carbom_18S_nifH_combined_abund_sparcc.txt > sparcc.log
-# "C:\Program Files\Anaconda\python.exe" MakeBootstraps.py carbom_18S_nifH_combined_abund.txt -n 100 -p ./bootstrap/ -t carbom_permutated_#.txt
-# FOR /L %C IN (0,1,99) DO ("C:\Program Files\Anaconda\python.exe" SparCC.py ./bootstrap/carbom_permutated_%C.txt -i 10 --cor_file=./bootstrap/boot_cor_%C.txt >> sparcc.log)
-# "C:\Program Files\Anaconda\python.exe" PseudoPvals.py carbom_18S_nifH_combined_abund_sparcc.txt ./bootstrap/boot_cor_#.txt 100 -o carbom_18S_nifH_combined_abund_sparcc.pvals_two_sided.txt -t two_sided >> sparcc.log
-
 # Read SparCC correlation 
-  sparcc <- read.table("carbom_18S_nifH_combined_abund_sparcc.txt",header=TRUE,sep="\t")
+  sparcc <- read.table("carbom_18S_nifH_combined_abund_no_Tricho_sparcc.txt",header=TRUE,sep="\t")
   row.names(sparcc) <- sparcc[,1]
   sparcc=as.matrix(sparcc[,2:ncol(sparcc)])
   
 # Read SparCC pseudo_pvalues 
-  sparcc_pvalue <- read.table("carbom_18S_nifH_combined_abund_sparcc.pvals_two_sided.txt",header=TRUE,sep="\t")
+  sparcc_pvalue <- read.table("carbom_18S_nifH_combined_abund_no_Tricho_sparcc.pvals_two_sided.txt",header=TRUE,sep="\t")
   row.names(sparcc_pvalue) <- sparcc_pvalue[,1]
   sparcc_pvalue=as.matrix(sparcc_pvalue[,2:ncol(sparcc_pvalue)])
   
-# Remove the links that correspond to correl <0.20 (excludes all negative correlations) and for which pseudo p-value is > 0.05
+# Remove the links that correspond to correl <0.18 (excludes all negative correlations) and for which pseudo p-value is > 0.05
   sparcc [sparcc<0.20] <- 0
   sparcc [sparcc_pvalue>0.05] <- 0  # This does not remove any edge... so all edges are supported for p <=0.05
 
@@ -883,8 +878,9 @@ otu_mL <- mutate(otu_mL, otu001_mL = otu001_pico + otu001_nano, otu002_mL = otu0
   otu_graph_vertex <- data.frame(V(otu_graph)$name)
   otu_graph_vertex <- rename(otu_graph_vertex, otu_label=V.otu_graph..name)
 
-# igraph replace "-" and " " by "."  - Not necessary anymore because the names have been fixed
+# igraph replace "/" and " " by "."  - Not necessary anymore because the names have been fixed
   otu_graph_vertex$otu_label <- as.character(gsub( ".", "_", otu_graph_vertex$otu_label,fixed=TRUE))
+  otu_graph_vertex$otu_label <- as.character(gsub( ".", "/", otu_graph_vertex$otu_label,fixed=TRUE))
 
 # Colors and shape for 18S
   foo <- select(otu_table, otu_label, otu_fraction_of_total, color)
@@ -913,114 +909,5 @@ otu_mL <- mutate(otu_mL, otu001_mL = otu001_pico + otu001_nano, otu002_mL = otu0
 
   # This file is used by Gephi
   # export Gephi output as pdf and rework in Corel Draw
-  write_graph(otu_graph, "otu_graph_sparcc.gml", format = "gml") 
+  write_graph(otu_graph, "otu_graph_sparcc_no_tricho.gml", format = "gml") 
   
-
-# =======================================================
-# 18S - Compare composition of samples with and without cyanos
-#-----------------------------------------------------------
-  
-  total_nifH_cyano <- total_nifH_cyano %>% mutate(sample_illumina= str_replace(sample_id, "X",""))
-  otu_melt_agg_class <- left_join(otu_melt_agg_class, total_nifH_cyano)
-  nifH_sequence_threshold
-  
-  # Compute mean for each class, each fraction
-  otu_melt_agg_mean_with_cyanos <- otu_melt_agg_class %>%
-                                   filter(total_nifH_cyano>nifH_sequence_threshold) %>%
-                                   group_by(fraction,Final_Taxo4,color_hex ) %>% 
-                                   summarize(sequence_pct=mean(sequence_number/total_18S) )
-  otu_melt_agg_mean_without_cyanos <- otu_melt_agg_class %>%
-                                   filter(total_nifH_cyano<nifH_sequence_threshold) %>%
-                                   group_by(fraction,Final_Taxo4,color_hex ) %>% 
-                                   summarize(sequence_pct=mean(sequence_number/total_18S) )
-
-# Do the tree maps
-treemap(otu_melt_agg_mean_with_cyanos, 
-        index=c("Final_Taxo4"),vSize="sequence_pct",vColor="color_hex",type="color",
-        title="18S with cyanos mean of sequences",asp=1, lowerbound.cex.labels= 1, fontsize.labels = 6)
-treemap(otu_melt_agg_mean_without_cyanos, 
-        index=c("Final_Taxo4"),vSize="sequence_pct",vColor="color_hex",type="color",
-        title="18S without cyanos mean of sequences",asp=1, lowerbound.cex.labels= 1, fontsize.labels = 6)
-
-
-  
-  
-  
-  
-  
-  
-  
-  
-  
-    
-# =======================================================
-# ======  NOT USED  ======================
-# =======================================================
-	
-	
-# =======================================================
-# FIG : Ven diagram for share OTUs
-otu_venn<-ddply(otu_melt, c("otu","fraction","level"), summarize, occurence=sum(sequence_number>0) )
-otu_venn_level_fraction <-dcast(otu_venn, otu ~ fraction + level, sum)
-otu_venn_level <-dcast(otu_venn, otu ~ level, sum)
-otu_venn_fraction <-dcast(otu_venn, otu ~ fraction, sum)
-
-otu_venn_fraction[(otu_venn_fraction$Nano>0)&(otu_venn_fraction$Pico>0),"summary"]<-"Nano+Pico"
-otu_venn_fraction[(otu_venn_fraction$Nano>0)&(otu_venn_fraction$Pico==0),"summary"]<-"Nano"
-otu_venn_fraction[(otu_venn_fraction$Nano==0)&(otu_venn_fraction$Pico>0),"summary"]<-"Pico"
-otu_venn_fraction_plot<-ddply(otu_venn_fraction, c("summary"), summarize, otu_number=length(summary) )
-
-otu_venn_level[(otu_venn_level$Surf>0)&(otu_venn_level$Deep>0)&(otu_venn_level$Tricho>0),"summary"]<-"Surf+Deep+Tricho"
-otu_venn_level[(otu_venn_level$Surf>0)&(otu_venn_level$Deep>0)&(otu_venn_level$Tricho==0),"summary"]<-"Surf+Deep"
-otu_venn_level[(otu_venn_level$Surf>0)&(otu_venn_level$Deep==0)&(otu_venn_level$Tricho==0),"summary"]<-"Surf"
-otu_venn_level[(otu_venn_level$Surf==0)&(otu_venn_level$Deep>0)&(otu_venn_level$Tricho==0),"summary"]<-"Deep"
-otu_venn_level[(otu_venn_level$Surf>0)&(otu_venn_level$Deep==0)&(otu_venn_level$Tricho>0),"summary"]<-"Surf+Tricho"
-otu_venn_level[(otu_venn_level$Surf==0)&(otu_venn_level$Deep>0)&(otu_venn_level$Tricho>0),"summary"]<-"Deep+Tricho"
-otu_venn_level[(otu_venn_level$Surf==0)&(otu_venn_level$Deep==0)&(otu_venn_level$Tricho>0),"summary"]<-"Tricho"
-otu_venn_level_plot<-ddply(otu_venn_level, c("summary"), summarize, otu_number=length(summary) )
-
-# =======================================================
-# FIG : BLAST results
-otu_BLAST<- read.table("carbom_16S_otu_0.02 with BLAST.txt", header=TRUE, sep="\t", na.strings="NA", dec=".", strip.white=TRUE)
-otu_BLAST <- otu_BLAST[otu_BLAST$taxo1!="Bacteria",]																    # Remove  otus from Bacteria
-otu_BLAST <- otu_BLAST[otu_BLAST$Final_Taxo4!="Embryophyceae",]															# Remove  otus from higher plants
-otu_BLAST_melt <- melt(otu_BLAST, id.vars=c( "otu","taxo1","taxo2","taxo3","Final_Taxo4","taxo5","taxo6","taxo7","taxo8","taxo9","taxo10","otu_total"),measure.vars=c("BLAST_id_pct","BLAST_cult_id_pct"),variable.name = "BLAST_target", value.name = "BLAST_id_pct")
-
-ggplot(otu_BLAST_melt, aes(Final_Taxo4, BLAST_id_pct)) + geom_boxplot(aes(fill = BLAST_target))+ theme(axis.text.x=element_text(angle = 45, hjust = 1)) 
-ggplot(otu_BLAST_melt, aes(Final_Taxo4, BLAST_id_pct)) + geom_point(aes(color = BLAST_target), size=6)+ theme(axis.text.x=element_text(angle = 45, hjust = 1))
-ggplot(otu_BLAST_melt, aes(otu_total, BLAST_id_pct)) + geom_point(aes(color = Final_Taxo4, shape=BLAST_target), size=6)+ scale_x_log10(limits=c(100,200000))
-
-# =======================================================
-# FIG : Phylogenetic Trees
-
-library("ggtree")
-
-# Read the tree
-tree<-read.tree(file = "C:/Daniel/Papers/Ribeiro CARBOM PLoS 2015/data 16S NGS/trees/Haptos/Hapto_RefSeqs_BenteTree_1.7 FastTree.newick")
-
-# Export the tips ID and the names
-tree.tips<-data.frame(tip=c(1:length(tree.haptos$tip.label)),label=tree.haptos$tip.label)
-
-# Export to Excel and then add the size of the OTUs
-tree.tips<- read.table("C:/Daniel/Papers/Ribeiro CARBOM PLoS 2015/data 16S NGS/carbom_16S_otu_0.02_tree_hapto_labels.txt", header=TRUE, sep="\t", na.strings="NA", dec=".", strip.white=TRUE)
-
-tree.graph<-ggtree(tree.haptos)+ geom_tiplab(size=1, align=FALSE)
-tree.inset <- lapply(tree.tips$size_relative, function(circle_size) { 
-	if (circle_size>0) {ggplot()+ scale_x_continuous(limits = c(0,1)) + scale_y_continuous(limits = c(0,1))+ geom_point(aes(x=0.5, y=0.5), size=30*circle_size, shape=21, fill="red") + theme_inset() }
-	else {ggplot()+ scale_x_continuous(limits = c(0,1)) + scale_y_continuous(limits = c(0,1))+ geom_point(aes(x=10, y=10), size=0, shape=21, fill="red") + theme_inset() }
-	}) 
-names(tree.inset) <- tree.tips$node 
-inset(tree.graph, tree.inset, width=.03, height=.1, vjust=0, hjust=-0.02, x = "branch")
-
-
-
-bars <- nodebar(tree.tips, cols=4)
-inset(tree.graph, bars)
-tree.graph
-
-# Tests
-ggtree(tree.haptos)+ geom_tiplab(size=3, align=FALSE)
-ggtree(tree.haptos, layout="circular")+ geom_tiplab(size=3, aes(angle=angle), align=TRUE)
-ggtree(tree.haptos) + geom_text2(aes(subset==isTip, label=node), hjust=-.3)
-
-
