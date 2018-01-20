@@ -1,0 +1,20 @@
+class	color	color_otu	color_otu_hex
+Cyanobacteria_UCYN_A1	blue		#045a8d
+Cyanobacteria_UCYN_A2	blue		#2b8cbe
+Cyanobacteria_UCYN_A3	blue		#74a9cf
+Cyanobacteria_UCYN_A4	blue		#a6bddb
+Cyanobacteria_Trichodesmium	blue		#d0d1e6
+Cyanobacteria_Tolypothrix	blue		#f1eef6
+Cyanobacteria_X	blue		#f1eef6
+Burkholderiales_Burkholderia			
+Campylobacterales_Sulfuricurvum			
+Campylobacterales_Sulfurospirillum			
+Clostridiales_Ruminococcus			
+Gammaproteobacteria_Uncultured			
+Pseudomonadales_Azotobacter			
+Pseudomonadales_Pseudomonas			
+Rhizobiales_Rhizobium			
+Rhizobiales_Rhodopseudomonas			
+Rhizobiales_X			
+Unknown_X			
+Others			
